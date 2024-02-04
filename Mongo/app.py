@@ -1,6 +1,7 @@
+#this is created to push the events given by clients
 import requests
 
-sample_event_data = {"eventname": "Sample Event", "location": "Sample Location"}
+sample_event_data = {"eventname": "Abc Event", "location": "Bangalore"}
 server_endpoint = "http://localhost:80/api/v1/events/create"
 
 try:

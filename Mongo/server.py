@@ -1,12 +1,12 @@
-from flask import Flask, Response, request, jsonify
+from flask import Flask, request, jsonify
 import pymongo
 from bson.objectid import ObjectId
 import requests
-import json
 import time
 
 app = Flask(__name__)
 
+# MongoDB configuration
 try:
     mongo = pymongo.MongoClient(
         host="localhost", port=27017, serverSelectionTimeoutMS=1000
@@ -18,6 +18,11 @@ except pymongo.errors.ServerSelectionTimeoutError as e:
 except Exception as e:
     print(f"An unexpected error occurred: {e}")
 
+# Configuration
+MAX_RETRIES = 5
+RETRY_INTERVAL = 60
+
+# Submitting an event
 @app.route("/api/v1/events/submit", methods=["POST"])
 def submit_event():
     try:
@@ -30,6 +35,7 @@ def submit_event():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+# Creating an event
 @app.route("/api/v1/events/create", methods=["POST"])
 def create_event():
     try:
@@ -46,17 +52,18 @@ def create_event():
 def process_event(event_data):
     pass
 
+# Forwarding event
 def forward_event_to_consumers(event_data):
-    consumer_urls = ["http://consumer1.com/api/v1/events/process", "http://consumer2.com/api/v1/events/process"]
+    consumer_urls = ["http://localhost:5001/api/v1/events/process", "http://localhost:5002/api/v1/events/process"]
     for consumer_url in consumer_urls:
         try:
             response = requests.post(consumer_url, json=event_data)
-            
             if response.status_code != 200:
                 print(f"Failed to forward event to {consumer_url}. Status code: {response.status_code}")
         except Exception as e:
             print(f"Error forwarding event to {consumer_url}: {str(e)}")
 
+# Subscribe to an event
 @app.route("/api/v1/events/subscribe", methods=["POST"])
 def subscribe():
     try:
@@ -73,14 +80,14 @@ def subscribe():
         print(ex)
         return jsonify({"message": "Error subscribing to event"}), 500
 
-def notify_subscribers_with_retry(event_id, subscribers, max_retries, retry_interval):
+# Notify subscribers by retrying
+def notify_subscribers_with_retry(event_id, subscribers):
     retries = 0
     success = False
 
-    while retries <= max_retries and not success:
+    while retries <= MAX_RETRIES and not success:
         try:
             log_notification(event_id, subscribers)
-
             for subscriber in subscribers:
                 send_notification(subscriber, event_id)
 
@@ -88,11 +95,12 @@ def notify_subscribers_with_retry(event_id, subscribers, max_retries, retry_inte
         except Exception as ex:
             print(f"Error notifying subscribers: {ex}")
             retries += 1
-            time.sleep(retry_interval)
+            time.sleep(RETRY_INTERVAL)
 
     if not success:
-        print(f"Notification failed after {max_retries} attempts")
+        print(f"Notification failed after {MAX_RETRIES} attempts")
 
+# Notify subscribers route
 @app.route("/api/v1/events/notify/<event_id>", methods=["PATCH"])
 def notify_subscribers_route(event_id):
     try:
@@ -101,7 +109,7 @@ def notify_subscribers_route(event_id):
         if not subscribers:
             return jsonify({"message": "No subscribers for the given event_id"}), 404
 
-        notify_subscribers_with_retry(event_id, subscribers, max_retries=5, retry_interval=60)
+        notify_subscribers_with_retry(event_id, subscribers)
 
         return jsonify({"message": "Notification attempts completed"}), 200
 
@@ -109,10 +117,10 @@ def notify_subscribers_route(event_id):
         print(ex)
         return jsonify({"message": "Error notifying subscribers"}), 500
 
+# To store in MongoDB
 def log_notification(event_id, subscribers):
     try:
         print("Subscribers:", subscribers)
-
         subscriber_ids = [ObjectId(subscriber["_id"]) for subscriber in subscribers]
         notification_data = {
             "event_id": ObjectId(event_id),
