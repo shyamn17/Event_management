@@ -1,4 +1,4 @@
-#This is for testing purpose to make consumer online to offline
+#This is used for testing purpose to make consumer online to offline or processing request to create events
 from flask import Flask, jsonify
 
 app = Flask(__name__)
